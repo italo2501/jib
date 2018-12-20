@@ -533,6 +533,7 @@ public abstract class JibPluginConfiguration extends AbstractMojo {
     return skip;
   }
 
+  @Nullable
   String getPackagingOverride() {
     return packagingOverride;
   }
