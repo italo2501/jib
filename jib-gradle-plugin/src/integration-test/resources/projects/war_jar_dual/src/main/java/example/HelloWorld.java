@@ -24,8 +24,7 @@ import javax.servlet.http.HttpServletResponse;
 
 @WebServlet(
     name = "HelloWorld",
-    urlPatterns = {"/hello"}
-)
+    urlPatterns = {"/hello"})
 public class HelloWorld extends HttpServlet {
 
   @Override
