@@ -77,7 +77,8 @@ public class WarProjectIntegrationTest {
     String nameBase = "gcr.io/" + IntegrationTestingConfiguration.getGCPProject() + '/';
     String targetImage = nameBase + "java_forced_on_war:gradle" + System.nanoTime();
     Assert.assertEquals(
-        "Hello from main()\n", JibRunHelper.buildAndRun(servlet25Project, targetImage));
+        "Hello from main()\n",
+        JibRunHelper.buildAndRun(servlet25Project, targetImage, "build-java-forced.gradle"));
   }
 
   private void verifyBuildAndRun(TestProject project, String label, String gradleBuildFile)
