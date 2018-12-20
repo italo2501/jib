@@ -417,13 +417,10 @@ public class BuildImageMojoIntegrationTest {
   @Test
   public void testExecute_javaForced()
       throws VerificationException, IOException, InterruptedException, DigestException {
+    String targetImage = getGcrImageReference("java-forced-on-war:maven");
     Assert.assertEquals(
         "Hello from main()\n",
-        buildAndRun(
-            servlet25Project.getProjectRoot(),
-            "java-forced-on-war:maven",
-            false,
-            "pom-java-forced.xml"));
+        buildAndRun(servlet25Project.getProjectRoot(), targetImage, false, "pom-java-forced.xml"));
   }
 
   private void buildAndRunWar(String label, String pomXml)
