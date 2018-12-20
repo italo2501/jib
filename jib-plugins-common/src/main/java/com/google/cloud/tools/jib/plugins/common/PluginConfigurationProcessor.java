@@ -55,8 +55,35 @@ import javax.annotation.Nullable;
  */
 public class PluginConfigurationProcessor {
 
+  /**
+   * Gets the value of the {@code appRoot} parameter. If the parameter is empty, returns {@link
+   * JavaLayerConfigurations#DEFAULT_WEB_APP_ROOT} for WAR projects or {@link
+   * JavaLayerConfigurations#DEFAULT_APP_ROOT} for other projects.
+   *
+   * @param rawConfiguration raw configuration data
+   * @param containerizeWar whether to do WAR containerization
+   * @return the app root value
+   * @throws InvalidAppRootException if {@code appRoot} value is not an absolute Unix path
+   */
+  public static AbsoluteUnixPath getAppRootChecked(
+      RawConfiguration rawConfiguration, boolean containerizeWar) throws InvalidAppRootException {
+    String appRoot = rawConfiguration.getAppRoot();
+    if (appRoot.isEmpty()) {
+      appRoot =
+          containerizeWar
+              ? JavaLayerConfigurations.DEFAULT_WEB_APP_ROOT
+              : JavaLayerConfigurations.DEFAULT_APP_ROOT;
+    }
+    try {
+      return AbsoluteUnixPath.get(appRoot);
+    } catch (IllegalArgumentException ex) {
+      throw new InvalidAppRootException(appRoot, appRoot, ex);
+    }
+  }
+
   public static PluginConfigurationProcessor processCommonConfigurationForDockerDaemonImage(
       RawConfiguration rawConfiguration,
+      boolean containerizeWar,
       InferredAuthProvider inferredAuthProvider,
       ProjectProperties projectProperties,
       @Nullable Path dockerExecutable,
@@ -78,6 +105,7 @@ public class PluginConfigurationProcessor {
 
     return processCommonConfiguration(
         rawConfiguration,
+        containerizeWar,
         inferredAuthProvider,
         projectProperties,
         containerizer,
@@ -87,6 +115,7 @@ public class PluginConfigurationProcessor {
 
   public static PluginConfigurationProcessor processCommonConfigurationForTarImage(
       RawConfiguration rawConfiguration,
+      boolean containerizeWar,
       InferredAuthProvider inferredAuthProvider,
       ProjectProperties projectProperties,
       Path tarImagePath,
@@ -101,6 +130,7 @@ public class PluginConfigurationProcessor {
 
     return processCommonConfiguration(
         rawConfiguration,
+        containerizeWar,
         inferredAuthProvider,
         projectProperties,
         containerizer,
@@ -110,6 +140,7 @@ public class PluginConfigurationProcessor {
 
   public static PluginConfigurationProcessor processCommonConfigurationForRegistryImage(
       RawConfiguration rawConfiguration,
+      boolean containerizeWar,
       InferredAuthProvider inferredAuthProvider,
       ProjectProperties projectProperties)
       throws InferredAuthRetrievalException, InvalidImageReferenceException,
@@ -136,6 +167,7 @@ public class PluginConfigurationProcessor {
     PluginConfigurationProcessor processor =
         processCommonConfiguration(
             rawConfiguration,
+            containerizeWar,
             inferredAuthProvider,
             projectProperties,
             Containerizer.to(targetImage),
@@ -148,6 +180,7 @@ public class PluginConfigurationProcessor {
   @VisibleForTesting
   static PluginConfigurationProcessor processCommonConfiguration(
       RawConfiguration rawConfiguration,
+      boolean containerizeWar,
       InferredAuthProvider inferredAuthProvider,
       ProjectProperties projectProperties,
       Containerizer containerizer,
@@ -160,7 +193,7 @@ public class PluginConfigurationProcessor {
     JibSystemProperties.checkProxyPortProperty();
 
     ImageReference baseImageReference =
-        ImageReference.parse(getBaseImage(rawConfiguration, projectProperties));
+        ImageReference.parse(getBaseImage(rawConfiguration, containerizeWar));
 
     EventDispatcher eventDispatcher =
         new DefaultEventDispatcher(projectProperties.getEventHandlers());
@@ -186,7 +219,7 @@ public class PluginConfigurationProcessor {
     JibContainerBuilder jibContainerBuilder =
         Jib.from(baseImage)
             .setLayers(projectProperties.getJavaLayerConfigurations().getLayerConfigurations())
-            .setEntrypoint(computeEntrypoint(rawConfiguration, projectProperties))
+            .setEntrypoint(computeEntrypoint(rawConfiguration, containerizeWar, projectProperties))
             .setProgramArguments(rawConfiguration.getProgramArguments().orElse(null))
             .setEnvironment(rawConfiguration.getEnvironment())
             .setExposedPorts(ExposedPortsParser.parse(rawConfiguration.getPorts()))
@@ -214,14 +247,6 @@ public class PluginConfigurationProcessor {
         isTargetImageCredentialPresent);
   }
 
-  public static boolean isWarPackaging(
-      RawConfiguration rawConfiguration, ProjectProperties projectProperties) {
-    if (!rawConfiguration.getPackagingOverride().isPresent()) {
-      return projectProperties.isWarProject();
-    }
-    return "war".equals(rawConfiguration.getPackagingOverride().get());
-  }
-
   /**
    * Compute the container entrypoint, in this order:
    *
@@ -233,6 +258,7 @@ public class PluginConfigurationProcessor {
    * </ol>
    *
    * @param rawConfiguration raw configuration data
+   * @param containerizeWar whether to do WAR containerization
    * @param projectProperties used for providing additional information
    * @return the entrypoint
    * @throws MainClassInferenceException if no valid main class is configured or discovered
@@ -241,7 +267,9 @@ public class PluginConfigurationProcessor {
   @Nullable
   @VisibleForTesting
   static List<String> computeEntrypoint(
-      RawConfiguration rawConfiguration, ProjectProperties projectProperties)
+      RawConfiguration rawConfiguration,
+      boolean containerizeWar,
+      ProjectProperties projectProperties)
       throws MainClassInferenceException, InvalidAppRootException {
     Optional<List<String>> rawEntrypoint = rawConfiguration.getEntrypoint();
     if (rawEntrypoint.isPresent() && !rawEntrypoint.get().isEmpty()) {
@@ -258,11 +286,11 @@ public class PluginConfigurationProcessor {
       return rawEntrypoint.get();
     }
 
-    if (isWarPackaging(rawConfiguration, projectProperties)) {
+    if (containerizeWar) {
       return null;
     }
 
-    AbsoluteUnixPath appRoot = getAppRootChecked(rawConfiguration, projectProperties);
+    AbsoluteUnixPath appRoot = getAppRootChecked(rawConfiguration, containerizeWar);
     String mainClass =
         MainClassResolver.resolveMainClass(
             rawConfiguration.getMainClass().orElse(null), projectProperties);
@@ -276,25 +304,21 @@ public class PluginConfigurationProcessor {
    * for non-WAR packaging.
    *
    * @param rawConfiguration raw configuration data
-   * @param projectProperties used for providing additional information
+   * @param containerizeWar whether to do WAR containerization
    * @return the base image
    */
   @VisibleForTesting
-  static String getBaseImage(
-      RawConfiguration rawConfiguration, ProjectProperties projectProperties) {
+  static String getBaseImage(RawConfiguration rawConfiguration, boolean containerizeWar) {
     return rawConfiguration
         .getFromImage()
-        .orElse(
-            isWarPackaging(rawConfiguration, projectProperties)
-                ? "gcr.io/distroless/java/jetty"
-                : "gcr.io/distroless/java");
+        .orElse(containerizeWar ? "gcr.io/distroless/java/jetty" : "gcr.io/distroless/java");
   }
 
   /**
    * Parses the list of raw volumes directories to a set of {@link AbsoluteUnixPath}
    *
    * @param rawConfiguration raw configuration data
-   * @return the set of parsed volumes.
+   * @return the set of parsed volumes
    * @throws InvalidContainerVolumeException if {@code volumes} are not valid absolute Unix paths
    */
   @VisibleForTesting
@@ -311,34 +335,6 @@ public class PluginConfigurationProcessor {
     }
 
     return volumes;
-  }
-
-  /**
-   * Gets the value of the {@code appRoot} parameter. If the parameter is empty, returns {@link
-   * JavaLayerConfigurations#DEFAULT_WEB_APP_ROOT} for WAR projects or {@link
-   * JavaLayerConfigurations#DEFAULT_APP_ROOT} for other projects.
-   *
-   * @param rawConfiguration raw configuration data
-   * @param projectProperties used for providing additional information
-   * @return the app root value
-   * @throws InvalidAppRootException if {@code appRoot} value is not an absolute Unix path
-   */
-  @VisibleForTesting
-  static AbsoluteUnixPath getAppRootChecked(
-      RawConfiguration rawConfiguration, ProjectProperties projectProperties)
-      throws InvalidAppRootException {
-    String appRoot = rawConfiguration.getAppRoot();
-    if (appRoot.isEmpty()) {
-      appRoot =
-          isWarPackaging(rawConfiguration, projectProperties)
-              ? JavaLayerConfigurations.DEFAULT_WEB_APP_ROOT
-              : JavaLayerConfigurations.DEFAULT_APP_ROOT;
-    }
-    try {
-      return AbsoluteUnixPath.get(appRoot);
-    } catch (IllegalArgumentException ex) {
-      throw new InvalidAppRootException(appRoot, appRoot, ex);
-    }
   }
 
   @VisibleForTesting
