@@ -148,6 +148,9 @@ public class JibExtension {
 
   @Input
   @Optional
+  // TODO: validate the value somewhere. We don't have a central place for config validation yet.
+  // Or, can this be enforced at the plugin level, e.g., by having this as an enum in both Maven and
+  // Gradle?
   public String getPackagingOverride() {
     if (System.getProperty(PropertyNames.PACKAGING_OVERRIDE) != null) {
       return System.getProperty(PropertyNames.PACKAGING_OVERRIDE);

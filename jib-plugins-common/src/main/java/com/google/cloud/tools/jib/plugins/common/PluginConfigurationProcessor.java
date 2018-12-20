@@ -214,13 +214,12 @@ public class PluginConfigurationProcessor {
         isTargetImageCredentialPresent);
   }
 
-  @VisibleForTesting
-  static boolean isWarPackaging(
+  public static boolean isWarPackaging(
       RawConfiguration rawConfiguration, ProjectProperties projectProperties) {
-    if ("war".equals(rawConfiguration.getPackagingOverride().orElse(null))) {
-      return true;
+    if (!rawConfiguration.getPackagingOverride().isPresent()) {
+      return projectProperties.isWarProject();
     }
-    return projectProperties.isWarProject();
+    return "war".equals(rawConfiguration.getPackagingOverride().get());
   }
 
   /**
@@ -273,8 +272,8 @@ public class PluginConfigurationProcessor {
 
   /**
    * Gets the suitable value for the base image. If the raw base image parameter is null, returns
-   * {@code "gcr.io/distroless/java/jetty"} for WAR projects or {@code "gcr.io/distroless/java"} for
-   * non-WAR.
+   * {@code "gcr.io/distroless/java/jetty"} for WAR packaging or {@code "gcr.io/distroless/java"}
+   * for non-WAR packaging.
    *
    * @param rawConfiguration raw configuration data
    * @param projectProperties used for providing additional information
@@ -286,7 +285,7 @@ public class PluginConfigurationProcessor {
     return rawConfiguration
         .getFromImage()
         .orElse(
-            projectProperties.isWarProject()
+            isWarPackaging(rawConfiguration, projectProperties)
                 ? "gcr.io/distroless/java/jetty"
                 : "gcr.io/distroless/java");
   }

@@ -470,6 +470,40 @@ public class PluginConfigurationProcessorTest {
     }
   }
 
+  @Test
+  public void testIsWarPackaging_noOverrideOnJarProject() {
+    Mockito.when(rawConfiguration.getPackagingOverride()).thenReturn(Optional.empty());
+    Mockito.when(projectProperties.isWarProject()).thenReturn(false);
+
+    Assert.assertFalse(
+        PluginConfigurationProcessor.isWarPackaging(rawConfiguration, projectProperties));
+  }
+
+  @Test
+  public void testIsWarPackaging_noOverrideOnWarProject() {
+    Mockito.when(rawConfiguration.getPackagingOverride()).thenReturn(Optional.empty());
+    Mockito.when(projectProperties.isWarProject()).thenReturn(true);
+
+    Assert.assertTrue(
+        PluginConfigurationProcessor.isWarPackaging(rawConfiguration, projectProperties));
+  }
+
+  @Test
+  public void testIsWarPackaging_warOverride() {
+    Mockito.when(rawConfiguration.getPackagingOverride()).thenReturn(Optional.of("war"));
+
+    Assert.assertTrue(
+        PluginConfigurationProcessor.isWarPackaging(rawConfiguration, projectProperties));
+  }
+
+  @Test
+  public void testIsWarPackaging_jarOverride() {
+    Mockito.when(rawConfiguration.getPackagingOverride()).thenReturn(Optional.of("war"));
+
+    Assert.assertTrue(
+        PluginConfigurationProcessor.isWarPackaging(rawConfiguration, projectProperties));
+  }
+
   private PluginConfigurationProcessor createPluginConfigurationProcessor()
       throws InvalidImageReferenceException, MainClassInferenceException, InvalidAppRootException,
           InferredAuthRetrievalException, IOException, InvalidWorkingDirectoryException,
