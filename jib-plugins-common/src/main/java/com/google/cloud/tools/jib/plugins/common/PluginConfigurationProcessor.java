@@ -146,6 +146,75 @@ public class PluginConfigurationProcessor {
   }
 
   @VisibleForTesting
+  static PluginConfigurationProcessor processCommonConfiguration(
+      RawConfiguration rawConfiguration,
+      InferredAuthProvider inferredAuthProvider,
+      ProjectProperties projectProperties,
+      Containerizer containerizer,
+      ImageReference targetImageReference,
+      boolean isTargetImageCredentialPresent)
+      throws InvalidImageReferenceException, MainClassInferenceException, InvalidAppRootException,
+          InferredAuthRetrievalException, IOException, InvalidWorkingDirectoryException,
+          InvalidContainerVolumeException {
+    JibSystemProperties.checkHttpTimeoutProperty();
+    JibSystemProperties.checkProxyPortProperty();
+
+    ImageReference baseImageReference =
+        ImageReference.parse(getBaseImage(rawConfiguration, projectProperties));
+
+    EventDispatcher eventDispatcher =
+        new DefaultEventDispatcher(projectProperties.getEventHandlers());
+    if (JibSystemProperties.isSendCredentialsOverHttpEnabled()) {
+      eventDispatcher.dispatch(
+          LogEvent.warn(
+              "Authentication over HTTP is enabled. It is strongly recommended that you do not "
+                  + "enable this on a public network!"));
+    }
+
+    RegistryImage baseImage = RegistryImage.named(baseImageReference);
+    boolean isBaseImageCredentialPresent =
+        configureCredentialRetrievers(
+            eventDispatcher,
+            baseImage,
+            baseImageReference,
+            PropertyNames.FROM_AUTH_USERNAME,
+            PropertyNames.FROM_AUTH_PASSWORD,
+            rawConfiguration.getFromAuth(),
+            inferredAuthProvider,
+            rawConfiguration.getFromCredHelper().orElse(null));
+
+    JibContainerBuilder jibContainerBuilder =
+        Jib.from(baseImage)
+            .setLayers(projectProperties.getJavaLayerConfigurations().getLayerConfigurations())
+            .setEntrypoint(computeEntrypoint(rawConfiguration, projectProperties))
+            .setProgramArguments(rawConfiguration.getProgramArguments().orElse(null))
+            .setEnvironment(rawConfiguration.getEnvironment())
+            .setExposedPorts(ExposedPortsParser.parse(rawConfiguration.getPorts()))
+            .setVolumes(getVolumesSet(rawConfiguration))
+            .setLabels(rawConfiguration.getLabels())
+            .setUser(rawConfiguration.getUser().orElse(null));
+    getWorkingDirectoryChecked(rawConfiguration)
+        .ifPresent(jibContainerBuilder::setWorkingDirectory);
+    if (rawConfiguration.getUseCurrentTimestamp()) {
+      eventDispatcher.dispatch(
+          LogEvent.warn(
+              "Setting image creation time to current time; your image may not be reproducible."));
+      jibContainerBuilder.setCreationTime(Instant.now());
+    }
+
+    PluginConfigurationProcessor.configureContainerizer(
+        containerizer, rawConfiguration, projectProperties);
+
+    return new PluginConfigurationProcessor(
+        jibContainerBuilder,
+        containerizer,
+        baseImageReference,
+        targetImageReference,
+        isBaseImageCredentialPresent,
+        isTargetImageCredentialPresent);
+  }
+
+  @VisibleForTesting
   static boolean isWarPackaging(
       RawConfiguration rawConfiguration, ProjectProperties projectProperties) {
     if ("war".equals(rawConfiguration.getPackagingOverride().orElse(null))) {
@@ -220,75 +289,6 @@ public class PluginConfigurationProcessor {
             projectProperties.isWarProject()
                 ? "gcr.io/distroless/java/jetty"
                 : "gcr.io/distroless/java");
-  }
-
-  @VisibleForTesting
-  static PluginConfigurationProcessor processCommonConfiguration(
-      RawConfiguration rawConfiguration,
-      InferredAuthProvider inferredAuthProvider,
-      ProjectProperties projectProperties,
-      Containerizer containerizer,
-      ImageReference targetImageReference,
-      boolean isTargetImageCredentialPresent)
-      throws InvalidImageReferenceException, MainClassInferenceException, InvalidAppRootException,
-          InferredAuthRetrievalException, IOException, InvalidWorkingDirectoryException,
-          InvalidContainerVolumeException {
-    JibSystemProperties.checkHttpTimeoutProperty();
-    JibSystemProperties.checkProxyPortProperty();
-
-    ImageReference baseImageReference =
-        ImageReference.parse(getBaseImage(rawConfiguration, projectProperties));
-
-    EventDispatcher eventDispatcher =
-        new DefaultEventDispatcher(projectProperties.getEventHandlers());
-    if (JibSystemProperties.isSendCredentialsOverHttpEnabled()) {
-      eventDispatcher.dispatch(
-          LogEvent.warn(
-              "Authentication over HTTP is enabled. It is strongly recommended that you do not "
-                  + "enable this on a public network!"));
-    }
-
-    RegistryImage baseImage = RegistryImage.named(baseImageReference);
-    boolean isBaseImageCredentialPresent =
-        configureCredentialRetrievers(
-            eventDispatcher,
-            baseImage,
-            baseImageReference,
-            PropertyNames.FROM_AUTH_USERNAME,
-            PropertyNames.FROM_AUTH_PASSWORD,
-            rawConfiguration.getFromAuth(),
-            inferredAuthProvider,
-            rawConfiguration.getFromCredHelper().orElse(null));
-
-    JibContainerBuilder jibContainerBuilder =
-        Jib.from(baseImage)
-            .setLayers(projectProperties.getJavaLayerConfigurations().getLayerConfigurations())
-            .setEntrypoint(computeEntrypoint(rawConfiguration, projectProperties))
-            .setProgramArguments(rawConfiguration.getProgramArguments().orElse(null))
-            .setEnvironment(rawConfiguration.getEnvironment())
-            .setExposedPorts(ExposedPortsParser.parse(rawConfiguration.getPorts()))
-            .setVolumes(getVolumesSet(rawConfiguration))
-            .setLabels(rawConfiguration.getLabels())
-            .setUser(rawConfiguration.getUser().orElse(null));
-    getWorkingDirectoryChecked(rawConfiguration)
-        .ifPresent(jibContainerBuilder::setWorkingDirectory);
-    if (rawConfiguration.getUseCurrentTimestamp()) {
-      eventDispatcher.dispatch(
-          LogEvent.warn(
-              "Setting image creation time to current time; your image may not be reproducible."));
-      jibContainerBuilder.setCreationTime(Instant.now());
-    }
-
-    PluginConfigurationProcessor.configureContainerizer(
-        containerizer, rawConfiguration, projectProperties);
-
-    return new PluginConfigurationProcessor(
-        jibContainerBuilder,
-        containerizer,
-        baseImageReference,
-        targetImageReference,
-        isBaseImageCredentialPresent,
-        isTargetImageCredentialPresent);
   }
 
   /**
