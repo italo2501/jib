@@ -18,6 +18,7 @@ package com.google.cloud.tools.jib.gradle;
 
 import com.google.cloud.tools.jib.plugins.common.PropertyNames;
 import java.io.File;
+import javax.annotation.Nullable;
 import org.gradle.api.Action;
 import org.gradle.api.Project;
 import org.gradle.api.model.ObjectFactory;
@@ -71,6 +72,7 @@ public class JibExtension {
   private final ExtraDirectoryParameters extraDirectory;
 
   private final Property<Boolean> allowInsecureRegistries;
+  @Nullable private String packagingOverride;
 
   public JibExtension(Project project) {
     ObjectFactory objectFactory = project.getObjects();
@@ -142,5 +144,14 @@ public class JibExtension {
       return Boolean.getBoolean(PropertyNames.ALLOW_INSECURE_REGISTRIES);
     }
     return allowInsecureRegistries.get();
+  }
+
+  @Input
+  @Optional
+  public String getPackagingOverride() {
+    if (System.getProperty(PropertyNames.PACKAGING_OVERRIDE) != null) {
+      return System.getProperty(PropertyNames.PACKAGING_OVERRIDE);
+    }
+    return packagingOverride;
   }
 }

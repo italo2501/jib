@@ -55,72 +55,6 @@ import javax.annotation.Nullable;
  */
 public class PluginConfigurationProcessor {
 
-  /**
-   * Compute the container entrypoint, in this order:
-   *
-   * <ol>
-   *   <li>null (inheriting from the base image), if the user specified value is {@code INHERIT}
-   *   <li>the user specified one, if set
-   *   <li>for a WAR project, null (it must be inherited from base image)
-   *   <li>for a non-WAR project, by resolving the main class
-   * </ol>
-   *
-   * @param rawConfiguration raw configuration data
-   * @param projectProperties used for providing additional information
-   * @return the entrypoint
-   * @throws MainClassInferenceException if no valid main class is configured or discovered
-   * @throws InvalidAppRootException if {@code appRoot} value is not an absolute Unix path
-   */
-  @Nullable
-  public static List<String> computeEntrypoint(
-      RawConfiguration rawConfiguration, ProjectProperties projectProperties)
-      throws MainClassInferenceException, InvalidAppRootException {
-    Optional<List<String>> rawEntrypoint = rawConfiguration.getEntrypoint();
-    if (rawEntrypoint.isPresent() && !rawEntrypoint.get().isEmpty()) {
-      if (rawConfiguration.getMainClass().isPresent()
-          || !rawConfiguration.getJvmFlags().isEmpty()) {
-        new DefaultEventDispatcher(projectProperties.getEventHandlers())
-            .dispatch(
-                LogEvent.warn("mainClass and jvmFlags are ignored when entrypoint is specified"));
-      }
-
-      if (rawEntrypoint.get().size() == 1 && "INHERIT".equals(rawEntrypoint.get().get(0))) {
-        return null;
-      }
-      return rawEntrypoint.get();
-    }
-
-    if (projectProperties.isWarProject()) {
-      return null;
-    }
-
-    AbsoluteUnixPath appRoot = getAppRootChecked(rawConfiguration, projectProperties);
-    String mainClass =
-        MainClassResolver.resolveMainClass(
-            rawConfiguration.getMainClass().orElse(null), projectProperties);
-    return JavaEntrypointConstructor.makeDefaultEntrypoint(
-        appRoot, rawConfiguration.getJvmFlags(), mainClass);
-  }
-
-  /**
-   * Gets the suitable value for the base image. If the raw base image parameter is null, returns
-   * {@code "gcr.io/distroless/java/jetty"} for WAR projects or {@code "gcr.io/distroless/java"} for
-   * non-WAR.
-   *
-   * @param rawConfiguration raw configuration data
-   * @param projectProperties used for providing additional information
-   * @return the base image
-   */
-  public static String getBaseImage(
-      RawConfiguration rawConfiguration, ProjectProperties projectProperties) {
-    return rawConfiguration
-        .getFromImage()
-        .orElse(
-            projectProperties.isWarProject()
-                ? "gcr.io/distroless/java/jetty"
-                : "gcr.io/distroless/java");
-  }
-
   public static PluginConfigurationProcessor processCommonConfigurationForDockerDaemonImage(
       RawConfiguration rawConfiguration,
       InferredAuthProvider inferredAuthProvider,
@@ -209,6 +143,83 @@ public class PluginConfigurationProcessor {
             isTargetImageCredentialPresent);
     processor.getJibContainerBuilder().setFormat(rawConfiguration.getImageFormat());
     return processor;
+  }
+
+  @VisibleForTesting
+  static boolean isWarPackaging(
+      RawConfiguration rawConfiguration, ProjectProperties projectProperties) {
+    if ("war".equals(rawConfiguration.getPackagingOverride().orElse(null))) {
+      return true;
+    }
+    return projectProperties.isWarProject();
+  }
+
+  /**
+   * Compute the container entrypoint, in this order:
+   *
+   * <ol>
+   *   <li>null (inheriting from the base image), if the user specified value is {@code INHERIT}
+   *   <li>the user specified one, if set
+   *   <li>for a WAR project, null (it must be inherited from base image)
+   *   <li>for a non-WAR project, by resolving the main class
+   * </ol>
+   *
+   * @param rawConfiguration raw configuration data
+   * @param projectProperties used for providing additional information
+   * @return the entrypoint
+   * @throws MainClassInferenceException if no valid main class is configured or discovered
+   * @throws InvalidAppRootException if {@code appRoot} value is not an absolute Unix path
+   */
+  @Nullable
+  @VisibleForTesting
+  static List<String> computeEntrypoint(
+      RawConfiguration rawConfiguration, ProjectProperties projectProperties)
+      throws MainClassInferenceException, InvalidAppRootException {
+    Optional<List<String>> rawEntrypoint = rawConfiguration.getEntrypoint();
+    if (rawEntrypoint.isPresent() && !rawEntrypoint.get().isEmpty()) {
+      if (rawConfiguration.getMainClass().isPresent()
+          || !rawConfiguration.getJvmFlags().isEmpty()) {
+        new DefaultEventDispatcher(projectProperties.getEventHandlers())
+            .dispatch(
+                LogEvent.warn("mainClass and jvmFlags are ignored when entrypoint is specified"));
+      }
+
+      if (rawEntrypoint.get().size() == 1 && "INHERIT".equals(rawEntrypoint.get().get(0))) {
+        return null;
+      }
+      return rawEntrypoint.get();
+    }
+
+    if (isWarPackaging(rawConfiguration, projectProperties)) {
+      return null;
+    }
+
+    AbsoluteUnixPath appRoot = getAppRootChecked(rawConfiguration, projectProperties);
+    String mainClass =
+        MainClassResolver.resolveMainClass(
+            rawConfiguration.getMainClass().orElse(null), projectProperties);
+    return JavaEntrypointConstructor.makeDefaultEntrypoint(
+        appRoot, rawConfiguration.getJvmFlags(), mainClass);
+  }
+
+  /**
+   * Gets the suitable value for the base image. If the raw base image parameter is null, returns
+   * {@code "gcr.io/distroless/java/jetty"} for WAR projects or {@code "gcr.io/distroless/java"} for
+   * non-WAR.
+   *
+   * @param rawConfiguration raw configuration data
+   * @param projectProperties used for providing additional information
+   * @return the base image
+   */
+  @VisibleForTesting
+  static String getBaseImage(
+      RawConfiguration rawConfiguration, ProjectProperties projectProperties) {
+    return rawConfiguration
+        .getFromImage()
+        .orElse(
+            projectProperties.isWarProject()
+                ? "gcr.io/distroless/java/jetty"
+                : "gcr.io/distroless/java");
   }
 
   @VisibleForTesting
@@ -320,7 +331,7 @@ public class PluginConfigurationProcessor {
     String appRoot = rawConfiguration.getAppRoot();
     if (appRoot.isEmpty()) {
       appRoot =
-          projectProperties.isWarProject()
+          isWarPackaging(rawConfiguration, projectProperties)
               ? JavaLayerConfigurations.DEFAULT_WEB_APP_ROOT
               : JavaLayerConfigurations.DEFAULT_APP_ROOT;
     }
