@@ -395,7 +395,7 @@ public class MavenLayerConfigurationsTest {
   @Test
   public void testIsWarProject_warOverride() {
     Mockito.when(rawConfiguration.getPackagingOverride()).thenReturn(Optional.of("war"));
-    Mockito.when(mockMavenProject.getPackaging()).thenReturn("jar");
+    Mockito.lenient().when(mockMavenProject.getPackaging()).thenReturn("jar");
 
     Assert.assertTrue(MojoCommon.isWarContainerization(mockMavenProject, rawConfiguration));
   }
@@ -403,7 +403,7 @@ public class MavenLayerConfigurationsTest {
   @Test
   public void testIsWarProject_javaOverride() {
     Mockito.when(rawConfiguration.getPackagingOverride()).thenReturn(Optional.of("java"));
-    Mockito.when(mockMavenProject.getPackaging()).thenReturn("war");
+    Mockito.lenient().when(mockMavenProject.getPackaging()).thenReturn("war");
 
     Assert.assertFalse(MojoCommon.isWarContainerization(mockMavenProject, rawConfiguration));
   }

@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 
 - Setting proxy credentials (via system properties `http(s).proxyUser` and `http(s).proxyPassword`) is now supported.
 - Maven proxy settings are now supported.
+- PACKAGING OVERRIDE STUFF
 
 ### Changed
 
