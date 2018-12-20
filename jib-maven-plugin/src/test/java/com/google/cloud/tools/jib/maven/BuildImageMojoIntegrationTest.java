@@ -213,7 +213,6 @@ public class BuildImageMojoIntegrationTest {
   private static String pullAndRunBuiltImage(String imageReference)
       throws IOException, InterruptedException {
     new Command("docker", "pull", imageReference).run();
-    assertDockerInspectParameters(imageReference);
     return new Command("docker", "run", "--rm", imageReference).run();
   }
 
@@ -328,6 +327,7 @@ public class BuildImageMojoIntegrationTest {
         "Hello, " + before + ". An argument.\nrw-r--r--\nrw-r--r--\nfoo\ncat\n",
         buildAndRun(simpleTestProject.getProjectRoot(), targetImage, true, "pom.xml"));
 
+    assertDockerInspectParameters(targetImage);
     Instant buildTime =
         Instant.parse(
             new Command("docker", "inspect", "-f", "{{.Created}}", targetImage).run().trim());
@@ -341,6 +341,7 @@ public class BuildImageMojoIntegrationTest {
     String targetImage = getGcrImageReference("emptyimage:maven");
     Assert.assertEquals(
         "", buildAndRun(emptyTestProject.getProjectRoot(), targetImage, false, "pom.xml"));
+    assertDockerInspectParameters(targetImage);
     assertCreationTimeEpoch(targetImage);
     assertWorkingDirectory("", targetImage);
   }
